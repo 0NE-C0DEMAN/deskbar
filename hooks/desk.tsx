@@ -1005,7 +1005,7 @@ async function frame($: EngineInterface) {
 
       return want > was ? want : was + (want - was) * 0.55
     })
-    next.bars = glide.map(v => Math.round(v * 100) / 100)
+    next.bars = glide.map(v => Math.round(v * 4) / 4)
     peaks = glide.map((bar, i) => {
       if (bar >= (peaks[i] ?? 0)) {
         hang[i] = 0
@@ -1062,7 +1062,7 @@ function startMusic($: EngineInterface) {
   }
 
   if (musicTimer === undefined) {
-    musicTimer = $.clock.every(100, () => {
+    musicTimer = $.clock.every(130, () => {
       void frame($)
     })
   }

@@ -92,7 +92,7 @@ Then open the music dropdown, click **Open YouTube Music** (or start your own pl
 
 ## Set up the timer
 
-The timer shows only in projects that have a `timelog` folder. In a session in that project, run:
+The timer shows in every project. The first time you press start, or ask Claude to time the work, it makes a `timelog` folder in the project with the folder's name as the client and no rate or cap. Until then Claude does not start the timer by itself. To set a rate and a weekly cap, run:
 
 ```
 /timer setup 20 15 Acme

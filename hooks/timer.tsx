@@ -27,7 +27,8 @@ const openAt = atom({ plugin: 'deskbar', key: 'openAt' } as const, 0)
 // The side panel is the view; the band above the prompt is opt-in (/timer show).
 const isHidden = atom({ plugin: 'deskbar', key: 'timerHidden' } as const, false)
 
-type Context = { dir: string; config: Config; hasScript: boolean }
+// `isFresh`: the project has no timelog folder yet; the first start makes it.
+type Context = { dir: string; config: Config; hasScript: boolean; isFresh?: boolean }
 
 let ctx: Context | null = null
 let ledger: Entry[] = []
@@ -164,11 +165,7 @@ async function locate($: EngineInterface) {
   const hasLedger = await $.fs.exists(`${dir}/entries.jsonl`)
   const hasConfig = await $.fs.exists(`${dir}/config.json`)
 
-  if (!hasLedger && !hasConfig) {
-    ctx = null
-
-    return null
-  }
+  const isFresh = !hasLedger && !hasConfig
 
   const hasScript = await $.fs.exists(`${dir}/timelog.py`)
   let config: Config = {
@@ -196,7 +193,7 @@ async function locate($: EngineInterface) {
     }
   }
 
-  ctx = { dir, config, hasScript }
+  ctx = { dir, config, hasScript, isFresh }
 
   return ctx
 }
@@ -406,6 +403,16 @@ async function startTimer($: EngineInterface, task: string, isCall: boolean) {
   }
 
   const { dir, config } = ctx
+
+  // A project timed for the first time: its timelog folder is made now, with
+  // the folder's name as the client and no rate or cap (/timer setup sets them).
+  if (ctx.isFresh === true) {
+    await $.fs.write(`${dir}/config.json`, `${JSON.stringify(config, null, 2)}\n`)
+    await $.fs.write(`${dir}/entries.jsonl`, '')
+    ctx = { ...ctx, isFresh: false }
+    hasTool = false
+  }
+
   const running = await readRunning($, dir)
 
   if (running !== null) {
@@ -590,7 +597,13 @@ async function rules($: EngineInterface) {
   const { client, rate, weeklyCap, currency } = ctx.config
   const terms = `Client: ${client}. Rate: ${rate > 0 ? `${currency}${rate}/h` : 'not set'}. Weekly cap: ${weeklyCap > 0 ? `${weeklyCap} h` : 'none'}.`
 
-  return text === '' ? null : `${terms}\n\n${text}`
+  // Where nothing has been timed yet the model does not start the timer by itself.
+  const fresh =
+    ctx.isFresh === true
+      ? 'This project has no timelog yet. Do NOT start the timer on your own here: start it only when the user asks to time or bill this work, or says it is client work. The first start creates the timelog folder; the rules below apply from then on.\n\n'
+      : ''
+
+  return text === '' ? null : `${fresh}${terms}\n\n${text}`
 }
 
 // Whether the table is the dropdown to draw: open, and opened after any of

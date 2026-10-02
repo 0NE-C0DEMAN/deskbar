@@ -923,7 +923,7 @@ let peaks: number[] = []
 let glide: number[] = []
 let hang: number[] = []
 let cover = { key: '', uri: '' }
-// The moving bars cost a redraw of the whole row ten times a second, which
+// The moving bars cost a redraw of the whole row five times a second, which
 // can make a hovered button flicker; with them off the row redraws once a second.
 // Surface modules (regions that animate by themselves) run in the terminal,
 // and in the desktop app from Claude Code 2.1.287; an older desktop build
@@ -1062,7 +1062,7 @@ function startMusic($: EngineInterface) {
   }
 
   if (musicTimer === undefined) {
-    musicTimer = $.clock.every(130, () => {
+    musicTimer = $.clock.every(200, () => {
       void frame($)
     })
   }

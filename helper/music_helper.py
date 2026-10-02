@@ -85,6 +85,9 @@ class Spectrum(threading.Thread):
             for found in [np.where((freqs >= lo) & (freqs < hi))[0]]
         ]
         self.window = np.hanning(BLOCK)
+        # 3 dB an octave up, so the highs show beside the bass
+        self.tilt = 3.0 * np.log2(np.sqrt(edges[:-1] * edges[1:]) / 50)
+        self.ref = -30.0
 
     def run(self) -> None:
         try:
@@ -106,9 +109,14 @@ class Spectrum(threading.Thread):
                     ring = np.concatenate((ring[hop:], mono[:hop]))
                     mag = np.abs(np.fft.rfft(ring * self.window)) / (BLOCK / 4)
                     raw = np.array([mag[b].max() if len(b) else 0.0 for b in self.bins])
-                    db = 20 * np.log10(raw + 1e-7)                # about -140 to 0
-                    now = np.clip((db + 62) / 50, 0, 1)            # -62 dB floor
-                    self.bars = np.maximum(now, self.bars * 0.85)  # fast up, slow down
+                    db = 20 * np.log10(raw + 1e-7) + self.tilt     # about -140 to 0
+                    # The scale follows the music: its top is the loudest band of the
+                    # last seconds (it sinks 2 dB a second), 38 dB under that is dark,
+                    # so loud and quiet songs both fill the display without pinning it.
+                    top = float(db.max())
+                    self.ref = max(top, self.ref - 0.045, -55.0)
+                    now = np.clip((db - (self.ref - 38)) / 38, 0, 1) ** 1.3
+                    self.bars = np.maximum(now, self.bars * 0.8)   # fast up, slow down
                     self.level = float(np.sqrt(np.mean(mono ** 2)))
                     self.at = time.time()
         except Exception as e:  # noqa: BLE001

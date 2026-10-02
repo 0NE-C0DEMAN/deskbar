@@ -802,8 +802,11 @@ async function loadSessions($: EngineInterface): Promise<TodoSession[]> {
   const folders = (await $.fs.list(`${dir}/tasks`).catch(() => [])).filter(entry => entry.kind === 'dir')
   const found: { session: TodoSession; newest: number; size: number }[] = []
 
-  for (const folder of folders) {
-    const files = (await $.fs.list(`${dir}/tasks/${folder.name}`).catch(() => [])).filter(entry => entry.name.endsWith('.json'))
+  // every session's folder is listed at once, not one after another
+  const listings = await Promise.all(folders.map(folder => $.fs.list(`${dir}/tasks/${folder.name}`).catch(() => [])))
+
+  for (const [at, folder] of folders.entries()) {
+    const files = (listings[at] ?? []).filter(entry => entry.name.endsWith('.json'))
 
     if (files.length > 0) {
       found.push({
@@ -1000,7 +1003,7 @@ async function frame($: EngineInterface) {
     glide = next.bars.map((want, i) => {
       const was = glide[i] ?? 0
 
-      return was + (want - was) * (want > was ? 0.75 : 0.4)
+      return want > was ? want : was + (want - was) * 0.55
     })
     next.bars = glide.map(v => Math.round(v * 100) / 100)
     peaks = glide.map((bar, i) => {
@@ -1105,26 +1108,9 @@ const xml = (text: string) => text.replace(/&/g, '&amp;').replace(/</g, '&lt;').
 
 const mmss = (seconds: number) => `${Math.floor(Math.max(0, seconds) / 60)}:${pad(Math.floor(Math.max(0, seconds) % 60))}`
 
-// The retro deck: a dark hi-fi faceplate with a green phosphor display (track,
-// artist, time and a progress line) and an LED spectrum analyser, twelve
-// segments a bar, green then amber then red, with falling peak caps. The top
-// segment of a bar lights in part, so a bar grows smoothly, not a step at a time.
-function deck(m: Music | null, nowMs: number, width: number, art: string, hasBars: boolean) {
-  const isLive = m !== null && nowMs / 1000 - m.at < 3
-  // with the bars in a region of their own, the picture is the display alone
-  const W_ = hasBars ? Math.max(420, width) : Math.max(300, Math.round(width * 0.54))
-  const H_ = 96
-  const split = hasBars ? Math.round(W_ * 0.52) : W_ - 6
-  const phosphor = '#7dff6b'
-  const dimmed = '#2f6b33'
-  const title = !isLive ? 'STARTING…' : !m.has ? 'NO MUSIC PLAYING' : m.title === '' ? 'UNTITLED' : m.title
-  const artist = !isLive ? 'waking the deck' : !m.has ? 'open YouTube Music and press play' : m.artist
-  // the cover (or an empty record sleeve) takes the left of the display
-  const left = 92
-  const chars = Math.max(10, Math.floor((split - left - 46) / 9.2))
-  const part = isLive && m.has && m.duration > 0 ? Math.max(0, Math.min(1, m.now / m.duration)) : 0
-  const barsLeft = split + 16
-  const barsWide = W_ - barsLeft - 16
+// The analyser's lights: 24 bars of twelve segments, green then amber then red,
+// the top one of a bar lit in part, with peak caps.
+function ledRects(m: Music | null, isLive: boolean, barsLeft: number, barsWide: number) {
   const n = 24
   const step = barsWide / n
   const SEG = 12
@@ -1134,7 +1120,7 @@ function deck(m: Music | null, nowMs: number, width: number, art: string, hasBar
 
   for (let b = 0; b < n; b += 1) {
     // the helper's heights run 0 to 9
-    const height = isLive ? (Math.max(0, Math.min(9, m.bars[b] ?? 0)) / 9) * SEG : 0
+    const height = isLive && m !== null ? (Math.max(0, Math.min(9, m.bars[b] ?? 0)) / 9) * SEG : 0
     const peak = isLive ? (Math.max(0, Math.min(9, peaks[b] ?? 0)) / 9) * SEG : 0
     const x = (barsLeft + b * step + 1).toFixed(1)
     const w = Math.max(3, step - 3).toFixed(1)
@@ -1153,6 +1139,40 @@ function deck(m: Music | null, nowMs: number, width: number, art: string, hasBar
       leds += `<rect x="${x}" y="${(85.6 - peak * pitch - 1.6).toFixed(2)}" width="${w}" height="1.6" fill="#eafff0"/>`
     }
   }
+
+  return leds
+}
+
+// The analyser alone, as a small picture: it is redrawn ten times a second,
+// and the display beside it (with the cover) only when the second changes.
+function ledPanel(m: Music | null, nowMs: number, width: number) {
+  const isLive = m !== null && nowMs / 1000 - m.at < 3
+  const W_ = Math.max(160, Math.round(width))
+
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${W_}" height="96" viewBox="0 0 ${W_} 96"><rect x="0.5" y="0.5" width="${W_ - 1}" height="95" rx="9" fill="#1b1e21" stroke="#3b4146"/><rect x="6" y="9" width="${W_ - 12}" height="78" rx="5" fill="#060b08" stroke="#0e2a14"/>${ledRects(m, isLive, 14, W_ - 28)}</svg>`
+}
+
+// The retro deck: a dark hi-fi faceplate with a green phosphor display (track,
+// artist, time and a progress line) and an LED spectrum analyser, twelve
+// segments a bar, green then amber then red, with falling peak caps. The top
+// segment of a bar lights in part, so a bar grows smoothly, not a step at a time.
+function deck(m: Music | null, nowMs: number, width: number, art: string, hasBars: boolean) {
+  const isLive = m !== null && nowMs / 1000 - m.at < 3
+  // with the bars in a region of their own, the picture is the display alone
+  const W_ = hasBars ? Math.max(420, width) : Math.max(300, Math.round(width * 0.54))
+  const H_ = 96
+  const split = hasBars ? Math.round(W_ * 0.52) : W_ - 6
+  const phosphor = '#7dff6b'
+  const dimmed = '#2f6b33'
+  const title = !isLive ? 'STARTING…' : !m.has ? 'NO MUSIC PLAYING' : m.title === '' ? 'UNTITLED' : m.title
+  const artist = !isLive ? 'waking the deck' : !m.has ? 'open YouTube Music and press play' : m.artist
+  // the cover (or an empty record sleeve) takes the left of the display
+  const left = 92
+  const chars = Math.max(10, Math.floor((split - left - 46) / 9.2))
+  const part = isLive && m.has && m.duration > 0 ? Math.max(0, Math.min(1, Math.floor(m.now) / m.duration)) : 0
+  const barsLeft = split + 16
+  const barsWide = W_ - barsLeft - 16
+  const leds = hasBars ? ledRects(m, isLive, barsLeft, barsWide) : ''
 
   const state = !isLive || !m.has ? '■' : m.playing ? '▶' : '❚❚'
 
@@ -1258,7 +1278,8 @@ async function shown($: EngineInterface) {
 // again right then, whatever the age of the answer in hand.
 async function openFresh($: EngineInterface, name: string) {
   await setPanel($, name)
-  await poll($, 0).catch(() => undefined)
+  // not waited for: the dropdown is already open, the answer redraws it
+  void poll($, 0).catch(() => undefined)
 }
 
 function startDesk($: EngineInterface) {
@@ -1562,19 +1583,7 @@ async function measure($: EngineInterface) {
   $.ui.invalidate('ui.render')
 }
 
-// Leaves a note of the band's last draw where it can be read from outside
-// the app: the hook ran and returned a tree, or it threw and why.
-let traced = ''
 let hasProof = false
-
-async function trace($: EngineInterface, note: string) {
-  if (note === traced) {
-    return
-  }
-
-  traced = note
-  await $.fs.write(`${claudeDir($)}/deskbar-data/trace-desk.txt`, `${new Date().toISOString()} ${note}\n`).catch(() => undefined)
-}
 
 async function band($: EngineInterface, e: any, below: any): Promise<any> {
   {
@@ -2058,9 +2067,14 @@ async function band($: EngineInterface, e: any, below: any): Promise<any> {
               </Text>
             ) : (
               <Svg
-                source={deck(playing, Date.now(), Math.round((Number(e.props.bodyColumns) || 96) * 7.6), cover.uri, isClassic())}
+                source={deck(playing, Date.now(), Math.round((Number(e.props.bodyColumns) || 96) * 7.6), cover.uri, false)}
                 alt={playing === null || !playing.has ? 'music deck, nothing playing' : `playing ${playing.title} by ${playing.artist}`}
               />
+            )}
+            {isClassic() && Svg !== undefined && (
+              <Box marginLeft={1}>
+                <Svg source={ledPanel(playing, Date.now(), Math.round((Number(e.props.bodyColumns) || 96) * 7.6 * 0.44))} alt="spectrum" />
+              </Box>
             )}
             {settings.bars !== 'off' && Client !== undefined && (
               <Box flexGrow={1} marginLeft={1}>
@@ -2354,13 +2368,8 @@ export const registerDesk: Register = on => {
     const below = await next(e)
 
     try {
-      const drawn = await band($, e, below)
-      await trace($, `drew ${JSON.stringify(drawn).length} chars over ${below.type}, surface ${e.surface}, survey ${e.props.hasSurvey}, maxRows ${e.props.maxRows}, columns ${e.props.bodyColumns}`)
-
-      return drawn
-    } catch (error) {
-      await trace($, `threw ${String(error)}`)
-
+      return await band($, e, below)
+    } catch {
       return below
     }
   })

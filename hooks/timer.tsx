@@ -811,18 +811,6 @@ async function setWide($: EngineInterface, wide: boolean) {
   await openPanel($)
 }
 
-// Leaves a note of the band's last draw where it can be read from outside
-// the app: the hook ran and returned a tree, or it threw and why.
-let traced = ''
-
-async function trace($: EngineInterface, note: string) {
-  if (note === traced) {
-    return
-  }
-
-  traced = note
-  await $.fs.write(`${await dataRoot($)}/trace-timer.txt`, `${new Date().toISOString()} ${note}\n`).catch(() => undefined)
-}
 
 async function band($: EngineInterface, e: any, below: any): Promise<any> {
   {
@@ -1074,13 +1062,8 @@ export const registerTimer: Register = on => {
     const below = await next(e)
 
     try {
-      const drawn = await band($, e, below)
-      await trace($, `drew ${JSON.stringify(drawn).length} chars over ${below.type}, surface ${e.surface}, survey ${e.props.hasSurvey}`)
-
-      return drawn
-    } catch (error) {
-      await trace($, `threw ${String(error)}`)
-
+      return await band($, e, below)
+    } catch {
       return below
     }
   })

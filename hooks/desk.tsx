@@ -1,7 +1,7 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register, Timer } from 'claude-code'
 
-import { meterSvg, pulseSvg } from './motion'
+import { meterSvg, pulseSvg, spectrumSvg } from './motion'
 
 import type { Desk, Inbox, Meeting, Music, Note, Reading, Task, Todo, TodoSession } from '../types'
 
@@ -918,6 +918,11 @@ let isHelperUp = false
 let isFraming = false
 let frames = 0
 let peaks: number[] = []
+// how loud the music is, smoothed; the level drawn (0 to 3); and for how many
+// readings it has been different
+let loudness = 0
+let level = 0
+let waited = 0
 // the bars as drawn, gliding toward what the helper last heard, and how long
 // each peak cap has hung
 let glide: number[] = []
@@ -997,30 +1002,28 @@ async function frame($: EngineInterface) {
         cover = { key: next.coverKey, uri: typeof art.jpeg === 'string' && art.jpeg !== '' ? `data:image/jpeg;base64,${art.jpeg}` : '' }
       }
     }
-    // Between two frames a bar glides most of the way to the new reading on
-    // the way up and part of it on the way down, so it moves rather than
-    // jumps; a peak cap rides up with its bar, hangs a moment, then falls.
-    glide = next.bars.map((want, i) => {
-      const was = glide[i] ?? 0
+    // On this surface the row is not redrawn for every reading (a press that
+    // lands during a redraw is lost): the bars dance by themselves, and all
+    // they take from the speaker is how loud it is, 0 to 3, held until it has
+    // been different for a moment.
+    if (isClassic()) {
+      const heard = next.bars.length === 0 ? 0 : next.bars.reduce((sum, v) => sum + v, 0) / next.bars.length / 9
+      loudness = loudness * 0.7 + heard * 0.3
+      const now = !next.has || !next.playing ? 0 : loudness > 0.5 ? 3 : loudness > 0.3 ? 2 : loudness > 0.06 ? 1 : 0
+      waited = now === level ? 0 : waited + 1
 
-      return want > was ? want : was + (want - was) * 0.55
-    })
-    next.bars = glide.map(v => Math.round(v * 4) / 4)
-    peaks = glide.map((bar, i) => {
-      if (bar >= (peaks[i] ?? 0)) {
-        hang[i] = 0
-
-        return bar
+      if (waited >= 4 || (now === 0) !== (level === 0)) {
+        level = now
+        waited = 0
       }
 
-      hang[i] = (hang[i] ?? 0) + 1
+      next.bars = [level]
+    }
 
-      return hang[i] < 4 ? (peaks[i] ?? 0) : Math.max(bar, (peaks[i] ?? 0) - 0.18 * (hang[i] - 3))
-    })
     const current = await read($, music)
 
     // without the bars only a new song, play or pause, or the next second redraws
-    const same = (m: Music) => JSON.stringify(isClassic() ? { ...m, at: 0 } : { ...m, at: 0, now: Math.floor(m.now) })
+    const same = (m: Music) => JSON.stringify({ ...m, at: 0, now: Math.floor(m.now) })
 
     if (current === null || same(current) !== same(next)) {
       await update($, music, () => next)
@@ -2072,8 +2075,8 @@ async function band($: EngineInterface, e: any, below: any): Promise<any> {
               />
             )}
             {isClassic() && Svg !== undefined && (
-              <Box marginLeft={1}>
-                <Svg source={ledPanel(playing, Date.now(), Math.round((Number(e.props.bodyColumns) || 96) * 7.6 * 0.44))} alt="spectrum" />
+              <Box flexGrow={1} marginLeft={1}>
+                <Svg key="music-bars" source={spectrumSvg(isLive ? (playing.bars[0] ?? 0) : 0)} alt="spectrum" height={96} isInteractive />
               </Box>
             )}
             {settings.bars !== 'off' && Client !== undefined && (

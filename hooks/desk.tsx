@@ -430,6 +430,9 @@ function eventOf(text: string, nowMs: number) {
 
 // What is typed in the new-event field and not added yet.
 let draftEvent = ''
+// how many pages each tasks column has, as last drawn
+let pagesOpen = 1
+let pagesDone = 1
 
 async function addEvent($: EngineInterface, text: string) {
   const line = text.trim()
@@ -1536,7 +1539,6 @@ async function measure($: EngineInterface) {
   $.ui.invalidate('ui.render')
 }
 
-let hasProof = false
 
 async function band($: EngineInterface, e: any, below: any): Promise<any> {
   {
@@ -1826,6 +1828,13 @@ async function band($: EngineInterface, e: any, below: any): Promise<any> {
     const wide = Math.max(24, Math.floor(((Number(e.props.bodyColumns) || 96) - 10) / 2))
     const column = (title: string, tint: string, all: Task[], page: number, isDone: boolean, empty: string, draw: (task: Task) => unknown) => {
       const pages = Math.max(1, Math.ceil(all.length / fit))
+
+      if (isDone) {
+        pagesDone = pages
+      } else {
+        pagesOpen = pages
+      }
+
       const at = Math.min(page ?? 0, pages - 1)
       const lines = all.slice(at * fit, at * fit + fit)
       const left = all.length - (at * fit + lines.length)
@@ -2158,6 +2167,50 @@ async function band($: EngineInterface, e: any, below: any): Promise<any> {
   }
 }
 
+// The buttons inside the dropdowns, by their keys. A press is answered here and
+// not by the closure the drawing gave its button: while the row is redrawn
+// often (music playing) the drawing a closure belongs to may already be gone.
+// Answers false for a key it does not know.
+async function pressKey($: EngineInterface, key: string) {
+  const id = Number(key.slice(key.lastIndexOf('-') + 1))
+
+  if (key === 'event-add') {
+    await addEvent($, draftEvent)
+  } else if (key === 'todo-more-open' || key === 'todo-more-done') {
+    await turnPage($, key === 'todo-more-done', key === 'todo-more-done' ? pagesDone : pagesOpen)
+  } else if (key === 'todo-mine') {
+    await pickMine($)
+  } else if (key === 'todo-prev' || key === 'todo-next') {
+    await stepSession($, key === 'todo-prev' ? -1 : 1)
+  } else if (key.startsWith('todo-pick-')) {
+    await pickSession($, key.slice('todo-pick-'.length))
+  } else if (key === 'notes-clear') {
+    await clearDone($)
+  } else if (key === 'note-save') {
+    await saveDraft($, draftNote)
+  } else if (key.startsWith('note-done-')) {
+    await finishNote($, id)
+  } else if (key.startsWith('note-cal-')) {
+    await noteToEvent($, id)
+  } else if (key.startsWith('note-do-')) {
+    await noteToClaude($, id)
+  } else if (key === 'set-off') {
+    await setOn($, false)
+  } else if (key === 'set-bars-on' || key === 'set-bars-off') {
+    await setBars($, key === 'set-bars-on' ? 'on' : 'off')
+  } else if (key === 'set-sounds') {
+    await toggleSounds($)
+  } else if (key.startsWith('set-mail-')) {
+    await setMailMinutes($, id)
+  } else if (key.startsWith('set-') && CHIPS.includes(key.slice(4))) {
+    await toggleChip($, key.slice(4))
+  } else {
+    return false
+  }
+
+  return true
+}
+
 export const registerDesk: Register = on => {
   on('session.start', async ($, e, next) => {
     const result = await next(e)
@@ -2243,15 +2296,6 @@ export const registerDesk: Register = on => {
   // The smooth bars' region posts for its next frame of data; the answer's
   // props reach that region alone.
   on('ui.message', async ($, e, next) => {
-    // once: a line, readable from outside the app, saying a surface module is alive here
-    if (!hasProof) {
-      hasProof = true
-      await $.fs
-        .write(`${claudeDir($)}/deskbar-data/trace-client.txt`, `${new Date().toISOString()} ${e.element} posted from ${e.surface}, ${e.component}
-`)
-        .catch(() => undefined)
-    }
-
     if (e.element !== 'spectrum') {
       return {}
     }
@@ -2290,9 +2334,9 @@ export const registerDesk: Register = on => {
       await openFresh($, e.element)
     } else if (e.element === 'todo') {
       await toggleTodo($)
-    } else if (e.element === 'notes') {
-      await setPanel($, 'notes')
-    } else {
+    } else if (e.element === 'notes' || e.element === 'settings') {
+      await setPanel($, e.element)
+    } else if (!(await pressKey($, e.element))) {
       return next(e)
     }
 

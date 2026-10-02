@@ -1071,6 +1071,27 @@ export const registerTimer: Register = on => {
     )
   })
 
+  // The chip's buttons are answered here by their keys: while the row is being
+  // redrawn often (music playing), a press bound to a drawing's own closure can
+  // be lost, one answered by key is not.
+  on('ui.press', { component: 'AbovePrompt' }, async ($, e, next) => {
+    if (e.plugin !== 'deskbar') {
+      return next(e)
+    }
+
+    if (e.element === 'toggle') {
+      await pressToggle($)
+    } else if (e.element === 'resume') {
+      await pressResume($)
+    } else if (e.element === 'stop') {
+      await pressStop($)
+    } else {
+      return next(e)
+    }
+
+    return { element: e.element }
+  })
+
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
     const below = await next(e)
 

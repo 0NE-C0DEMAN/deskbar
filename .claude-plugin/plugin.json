@@ -1,0 +1,8 @@
+{
+  "name": "deskbar",
+  "version": "1.0.0",
+  "description": "A desk for the Claude Code prompt: context weather, Gmail, calendar, tasks across sessions, notes, a music deck and a billable-hours timer",
+  "author": { "name": "0NE-C0DEMAN", "url": "https://github.com/0NE-C0DEMAN" },
+  "license": "MIT",
+  "types": "./types/index.d.ts"
+}

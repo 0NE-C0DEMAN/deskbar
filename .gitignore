@@ -1,0 +1,7 @@
+.claude-plugin/types/
+__pycache__/
+*.pyc
+
+# full-quality film masters stay local
+media/deskbar-launch-16x9-v1.mp4
+media/deskbar-launch-9x16-v1.mp4

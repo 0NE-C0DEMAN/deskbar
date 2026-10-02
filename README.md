@@ -25,6 +25,17 @@ The widgets read their data directly. No model call is made unless you press the
 - **For mail and calendar:** the Gmail and Google Calendar connectors connected to your Claude account.
 - **For music:** Windows 10 or 11 and Python 3.11 or later. Everything else works on any platform.
 
+What each widget needs before it shows anything:
+
+| Widget | Needs |
+|---|---|
+| Weather, tasks, notes, timer, settings | Nothing. They work as soon as the row is on. |
+| Mail | The Gmail connector, connected in Claude's settings. |
+| Calendar | The Google Calendar connector, connected in Claude's settings. |
+| Music | Windows, Python 3.11 or later, and the helper set up as below. Any player Windows sees as media works; no browser extension is needed. |
+
+A widget whose connector is missing shows `?` on its icon and says why in its dropdown. The rest of the row keeps working. To drop a widget you do not use, turn it off in the settings dropdown.
+
 ## Install
 
 1. **Get the code.**

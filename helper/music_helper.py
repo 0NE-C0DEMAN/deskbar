@@ -39,7 +39,7 @@ LOG = HERE / "helper.log"
 BARS = 24
 RATE = 48000
 BLOCK = 2048
-FPS = 30
+FPS = 12
 TICK = 0.02              # the command file is looked at fifty times a second
 IDLE_EXIT = 12.0          # seconds without the mod's heartbeat
 
@@ -85,9 +85,6 @@ class Spectrum(threading.Thread):
             for found in [np.where((freqs >= lo) & (freqs < hi))[0]]
         ]
         self.window = np.hanning(BLOCK)
-        # 3 dB an octave up, so the highs show beside the bass
-        self.tilt = 3.0 * np.log2(np.sqrt(edges[:-1] * edges[1:]) / 50)
-        self.ref = -30.0
 
     def run(self) -> None:
         try:
@@ -96,37 +93,27 @@ class Spectrum(threading.Thread):
             warnings.simplefilter("ignore")
             speaker = sc.default_speaker()
             mic = sc.get_microphone(id=str(speaker.name), include_loopback=True)
-            # Half a block at a time into a rolling window: a fresh reading
-            # every 21 ms with the frequency detail of the full block.
-            hop = BLOCK // 2
-            ring = np.zeros(BLOCK)
-            with mic.recorder(samplerate=RATE, channels=2, blocksize=hop) as rec:
+            with mic.recorder(samplerate=RATE, channels=2, blocksize=BLOCK) as rec:
                 while True:
-                    data = rec.record(numframes=hop)
+                    data = rec.record(numframes=BLOCK)
                     mono = data.mean(axis=1) if data.ndim > 1 else data
-                    if len(mono) < hop:
+                    if len(mono) < BLOCK:
                         continue
-                    ring = np.concatenate((ring[hop:], mono[:hop]))
-                    mag = np.abs(np.fft.rfft(ring * self.window)) / (BLOCK / 4)
+                    mag = np.abs(np.fft.rfft(mono[:BLOCK] * self.window)) / (BLOCK / 4)
                     raw = np.array([mag[b].max() if len(b) else 0.0 for b in self.bins])
-                    db = 20 * np.log10(raw + 1e-7) + self.tilt     # about -140 to 0
-                    # The scale follows the music: its top is the loudest band of the
-                    # last seconds (it sinks 2 dB a second), 38 dB under that is dark,
-                    # so loud and quiet songs both fill the display without pinning it.
-                    top = float(db.max())
-                    self.ref = max(top, self.ref - 0.045, -55.0)
-                    now = np.clip((db - (self.ref - 38)) / 38, 0, 1) ** 1.3
-                    self.bars = np.maximum(now, self.bars * 0.8)   # fast up, slow down
+                    db = 20 * np.log10(raw + 1e-7)                # about -140 to 0
+                    now = np.clip((db + 62) / 50, 0, 1)            # -62 dB floor
+                    self.bars = np.maximum(now, self.bars * 0.72)  # fast up, slow down
                     self.level = float(np.sqrt(np.mean(mono ** 2)))
                     self.at = time.time()
         except Exception as e:  # noqa: BLE001
             self.error = f"{type(e).__name__}: {e}"
             log(f"spectrum stopped: {self.error}")
 
-    def read(self) -> list[float]:
+    def read(self) -> list[int]:
         if time.time() - self.at > 0.25:           # silence: let the bars fall
-            self.bars = self.bars * 0.88
-        return [round(float(v) * 9, 2) for v in self.bars]
+            self.bars = self.bars * 0.8
+        return [int(round(v * 9)) for v in self.bars]
 
 
 # ------------------------------------------------------------------ media session

@@ -1,7 +1,7 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register, Timer } from 'claude-code'
 
-import { meterSvg, pulseSvg, spectrumSvg } from './motion'
+import { meterSvg, pulseSvg } from './motion'
 
 import type { Desk, Inbox, Meeting, Music, Note, Reading, Task, Todo, TodoSession } from '../types'
 
@@ -918,15 +918,6 @@ let isHelperUp = false
 let isFraming = false
 let frames = 0
 let peaks: number[] = []
-// how loud the music is, smoothed; the level drawn (0 to 3); and for how many
-// readings it has been different
-let loudness = 0
-let level = 0
-let waited = 0
-// the bars as drawn, gliding toward what the helper last heard, and how long
-// each peak cap has hung
-let glide: number[] = []
-let hang: number[] = []
 let cover = { key: '', uri: '' }
 // The moving bars cost a redraw of the whole row five times a second, which
 // can make a hovered button flicker; with them off the row redraws once a second.
@@ -1002,28 +993,12 @@ async function frame($: EngineInterface) {
         cover = { key: next.coverKey, uri: typeof art.jpeg === 'string' && art.jpeg !== '' ? `data:image/jpeg;base64,${art.jpeg}` : '' }
       }
     }
-    // On this surface the row is not redrawn for every reading (a press that
-    // lands during a redraw is lost): the bars dance by themselves, and all
-    // they take from the speaker is how loud it is, 0 to 3, held until it has
-    // been different for a moment.
-    if (isClassic()) {
-      const heard = next.bars.length === 0 ? 0 : next.bars.reduce((sum, v) => sum + v, 0) / next.bars.length / 9
-      loudness = loudness * 0.7 + heard * 0.3
-      const now = !next.has || !next.playing ? 0 : loudness > 0.5 ? 3 : loudness > 0.3 ? 2 : loudness > 0.06 ? 1 : 0
-      waited = now === level ? 0 : waited + 1
-
-      if (waited >= 4 || (now === 0) !== (level === 0)) {
-        level = now
-        waited = 0
-      }
-
-      next.bars = [level]
-    }
-
+    // peak caps: jump up with a bar, then fall one step every few frames
+    peaks = next.bars.map((bar, i) => Math.max(bar, (peaks[i] ?? 0) - (frames % 3 === 0 ? 1 : 0)))
     const current = await read($, music)
 
     // without the bars only a new song, play or pause, or the next second redraws
-    const same = (m: Music) => JSON.stringify({ ...m, at: 0, now: Math.floor(m.now) })
+    const same = (m: Music) => JSON.stringify(isClassic() ? { ...m, at: 0 } : { ...m, at: 0, now: Math.floor(m.now) })
 
     if (current === null || same(current) !== same(next)) {
       await update($, music, () => next)
@@ -1111,54 +1086,9 @@ const xml = (text: string) => text.replace(/&/g, '&amp;').replace(/</g, '&lt;').
 
 const mmss = (seconds: number) => `${Math.floor(Math.max(0, seconds) / 60)}:${pad(Math.floor(Math.max(0, seconds) % 60))}`
 
-// The analyser's lights: 24 bars of twelve segments, green then amber then red,
-// the top one of a bar lit in part, with peak caps.
-function ledRects(m: Music | null, isLive: boolean, barsLeft: number, barsWide: number) {
-  const n = 24
-  const step = barsWide / n
-  const SEG = 12
-  const pitch = 5.75
-  const led = (i: number) => (i >= 10 ? '#ff4d4d' : i >= 7 ? '#ffc93c' : '#3ddc5a')
-  let leds = ''
-
-  for (let b = 0; b < n; b += 1) {
-    // the helper's heights run 0 to 9
-    const height = isLive && m !== null ? (Math.max(0, Math.min(9, m.bars[b] ?? 0)) / 9) * SEG : 0
-    const peak = isLive ? (Math.max(0, Math.min(9, peaks[b] ?? 0)) / 9) * SEG : 0
-    const x = (barsLeft + b * step + 1).toFixed(1)
-    const w = Math.max(3, step - 3).toFixed(1)
-
-    for (let i = 0; i < SEG; i += 1) {
-      const y = 81.5 - i * pitch
-      const lit = Math.max(0, Math.min(1, height - i))
-      leds += `<rect x="${x}" y="${y.toFixed(2)}" width="${w}" height="4.1" rx="0.8" fill="#13251a"/>`
-
-      if (lit > 0.02) {
-        leds += `<rect x="${x}" y="${y.toFixed(2)}" width="${w}" height="4.1" rx="0.8" fill="${led(i)}"${lit < 1 ? ` opacity="${lit.toFixed(2)}"` : ''}/>`
-      }
-    }
-
-    if (peak > 0.3 && peak >= height - 0.05) {
-      leds += `<rect x="${x}" y="${(85.6 - peak * pitch - 1.6).toFixed(2)}" width="${w}" height="1.6" fill="#eafff0"/>`
-    }
-  }
-
-  return leds
-}
-
-// The analyser alone, as a small picture: it is redrawn ten times a second,
-// and the display beside it (with the cover) only when the second changes.
-function ledPanel(m: Music | null, nowMs: number, width: number) {
-  const isLive = m !== null && nowMs / 1000 - m.at < 3
-  const W_ = Math.max(160, Math.round(width))
-
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="${W_}" height="96" viewBox="0 0 ${W_} 96"><rect x="0.5" y="0.5" width="${W_ - 1}" height="95" rx="9" fill="#1b1e21" stroke="#3b4146"/><rect x="6" y="9" width="${W_ - 12}" height="78" rx="5" fill="#060b08" stroke="#0e2a14"/>${ledRects(m, isLive, 14, W_ - 28)}</svg>`
-}
-
 // The retro deck: a dark hi-fi faceplate with a green phosphor display (track,
-// artist, time and a progress line) and an LED spectrum analyser, twelve
-// segments a bar, green then amber then red, with falling peak caps. The top
-// segment of a bar lights in part, so a bar grows smoothly, not a step at a time.
+// artist, time and a progress line) and an LED spectrum analyser, nine
+// segments a bar, green then amber then red, with falling peak caps.
 function deck(m: Music | null, nowMs: number, width: number, art: string, hasBars: boolean) {
   const isLive = m !== null && nowMs / 1000 - m.at < 3
   // with the bars in a region of their own, the picture is the display alone
@@ -1172,10 +1102,30 @@ function deck(m: Music | null, nowMs: number, width: number, art: string, hasBar
   // the cover (or an empty record sleeve) takes the left of the display
   const left = 92
   const chars = Math.max(10, Math.floor((split - left - 46) / 9.2))
-  const part = isLive && m.has && m.duration > 0 ? Math.max(0, Math.min(1, Math.floor(m.now) / m.duration)) : 0
+  const part = isLive && m.has && m.duration > 0 ? Math.max(0, Math.min(1, m.now / m.duration)) : 0
   const barsLeft = split + 16
   const barsWide = W_ - barsLeft - 16
-  const leds = hasBars ? ledRects(m, isLive, barsLeft, barsWide) : ''
+  const n = 24
+  const step = barsWide / n
+  const led = (i: number) => (i >= 8 ? '#ff4d4d' : i >= 6 ? '#ffc93c' : '#3ddc5a')
+  let leds = ''
+
+  for (let b = 0; b < n; b += 1) {
+    const height = isLive ? Math.max(0, Math.min(9, m.bars[b] ?? 0)) : 0
+    const peak = isLive ? Math.max(0, Math.min(9, peaks[b] ?? 0)) : 0
+    const x = (barsLeft + b * step + 1).toFixed(1)
+    const w = Math.max(3, step - 3).toFixed(1)
+
+    for (let i = 0; i < 9; i += 1) {
+      const y = 80 - i * 7.6
+      const isOn = i < height
+      leds += `<rect x="${x}" y="${y.toFixed(1)}" width="${w}" height="5.6" rx="1" fill="${isOn ? led(i) : '#13251a'}"${isOn ? '' : ' opacity="0.9"'}/>`
+    }
+
+    if (peak > 0 && peak >= height) {
+      leds += `<rect x="${x}" y="${(80 - (peak - 1) * 7.6 - 2.4).toFixed(1)}" width="${w}" height="1.8" fill="#eafff0"/>`
+    }
+  }
 
   const state = !isLive || !m.has ? '■' : m.playing ? '▶' : '❚❚'
 
@@ -2070,18 +2020,9 @@ async function band($: EngineInterface, e: any, below: any): Promise<any> {
               </Text>
             ) : (
               <Svg
-                source={deck(playing, Date.now(), Math.round((Number(e.props.bodyColumns) || 96) * 7.6), cover.uri, false)}
+                source={deck(playing, Date.now(), Math.round((Number(e.props.bodyColumns) || 96) * 7.6), cover.uri, isClassic())}
                 alt={playing === null || !playing.has ? 'music deck, nothing playing' : `playing ${playing.title} by ${playing.artist}`}
               />
-            )}
-            {isClassic() && Svg !== undefined && (
-              <Box marginLeft={1}>
-                <Svg
-                  key="music-bars"
-                  source={spectrumSvg(isLive ? (playing.bars[0] ?? 0) : 0, Math.round((Number(e.props.bodyColumns) || 96) * 7.6 * 0.44))}
-                  alt="spectrum"
-                />
-              </Box>
             )}
             {settings.bars !== 'off' && Client !== undefined && (
               <Box flexGrow={1} marginLeft={1}>

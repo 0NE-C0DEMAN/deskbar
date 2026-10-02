@@ -1563,13 +1563,13 @@ async function band($: EngineInterface, e: any, below: any): Promise<any> {
       Client !== undefined ? (
         <Client key={key} module="./meter.tsx" props={{ value, active: isActive, tint }} width={cells} height={1} />
       ) : Svg !== undefined ? (
-        <Svg source={meterSvg(value, isActive, tint, cells * 7)} alt={`${Math.round(value * 100)} percent`} width={cells * 7} height={10} isInteractive />
+        <Svg source={meterSvg(value, isActive, tint, cells * 7)} alt={`${Math.round(value * 100)} percent`} width={cells * 7} height={10} />
       ) : null
     const pulse = (key: string, tint: string, isFast: boolean) =>
       Client !== undefined ? (
         <Client key={key} module="./pulse.tsx" props={{ tint, fast: isFast }} width={1} height={1} />
       ) : Svg !== undefined ? (
-        <Svg source={pulseSvg(tint, isFast)} alt="now" width={12} height={12} isInteractive />
+        <Svg source={pulseSvg(tint, isFast)} alt="now" width={12} height={12} />
       ) : null
     const percent = now?.percent ?? 0
     const color = tone(percent)

@@ -780,7 +780,6 @@ function details(Box: any, Text: any, s: Snap, rows = 20, isNarrow = false, Clie
               alt="this week against the cap"
               width={isNarrow ? 56 : 98}
               height={10}
-              isInteractive
             />
           )}
         </Box>
@@ -888,7 +887,7 @@ async function band($: EngineInterface, e: any, below: any): Promise<any> {
                 {Client !== undefined ? (
                   <Client key="timer-pulse" module="./pulse.tsx" props={{ tint: v.color }} width={1} height={1} />
                 ) : (
-                  <Svg source={pulseSvg(v.color, false)} alt="recording" width={12} height={12} isInteractive />
+                  <Svg source={pulseSvg(v.color, false)} alt="recording" width={12} height={12} />
                 )}
               </Box>
             )}

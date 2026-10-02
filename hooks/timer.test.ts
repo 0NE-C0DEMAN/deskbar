@@ -269,7 +269,9 @@ test('the desk row and the timer share the band, one dropdown at a time', async 
   expect(await keys()).toContain('toggle,stop')
   // the live pieces: the context meter in the row, a breathing dot on the running timer
   // one moving piece in the row: the dot on the running timer
-  expect((await ui.findAll({ type: 'Svg' })).filter((x: any) => x.props.isInteractive === true).length).toBe(1)
+  // the moving pieces are plain pictures (a frame of its own is reloaded on every redraw and flickers)
+  expect((await ui.findAll({ type: 'Svg' })).filter((x: any) => x.props.isInteractive === true).length).toBe(0)
+  expect((await ui.findAll({ type: 'Svg' })).some((x: any) => String(x.props.source).includes('<animate'))).toBe(true)
 
   // the timer's table opens, then the notes dropdown takes its place
   await ui.press({ key: 'toggle' })

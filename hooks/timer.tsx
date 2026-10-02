@@ -634,8 +634,10 @@ async function pressStop($: EngineInterface) {
 async function pressResume($: EngineInterface) {
   const current = await read($, snap)
 
-  if (current !== null && current.last !== null) {
-    $.ui.toast(await startTimer($, current.last.task, false))
+  // the last task again; in a project never timed before, a plain name (the
+  // first start makes the timelog folder)
+  if (current !== null) {
+    $.ui.toast(await startTimer($, current.last?.task ?? 'Work', false))
   }
 }
 
@@ -874,7 +876,7 @@ async function band($: EngineInterface, e: any, below: any): Promise<any> {
               ● {clock}{' '}
             </Text>
             {run !== null && <Button key="stop" label="■ Stop" onPress={() => pressStop($)} />}
-            {run === null && s.last !== null && <Button key="resume" label="▶ Start" onPress={() => pressResume($)} />}
+            {run === null && <Button key="resume" label="▶ Start" onPress={() => pressResume($)} />}
             <Text> </Text>
             <Button key="toggle" label={open ? '▾' : '▸'} onPress={() => pressToggle($)} />
           </Box>
@@ -894,9 +896,7 @@ async function band($: EngineInterface, e: any, below: any): Promise<any> {
             <Box marginLeft={1} alignItems="center">
               {run !== null
                 ? iconChip('stop', stopTile, 'stop', clock, () => pressStop($))
-                : s.last !== null
-                  ? iconChip('resume', playTile, 'start', clock, () => pressResume($))
-                  : <Text dimColor>{clock}</Text>}
+                : iconChip('resume', playTile, 'start', clock, () => pressResume($))}
             </Box>
           </Box>
         )}

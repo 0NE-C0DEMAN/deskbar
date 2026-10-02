@@ -2075,8 +2075,12 @@ async function band($: EngineInterface, e: any, below: any): Promise<any> {
               />
             )}
             {isClassic() && Svg !== undefined && (
-              <Box flexGrow={1} marginLeft={1}>
-                <Svg key="music-bars" source={spectrumSvg(isLive ? (playing.bars[0] ?? 0) : 0)} alt="spectrum" height={96} isInteractive />
+              <Box marginLeft={1}>
+                <Svg
+                  key="music-bars"
+                  source={spectrumSvg(isLive ? (playing.bars[0] ?? 0) : 0, Math.round((Number(e.props.bodyColumns) || 96) * 7.6 * 0.44))}
+                  alt="spectrum"
+                />
               </Box>
             )}
             {settings.bars !== 'off' && Client !== undefined && (

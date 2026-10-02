@@ -26,8 +26,9 @@ export function pulseSvg(tint: string, isFast: boolean) {
 // themselves, in a frame of their own, so the row and its buttons stay still.
 // `level` is how loud the music is, 0 (silent) to 3: it sets how high they
 // dance, and the picture only changes when it does.
-export function spectrumSvg(level: number) {
-  const tall = [0, 0.38, 0.66, 0.95][Math.max(0, Math.min(3, Math.round(level)))] ?? 0
+export function spectrumSvg(level: number, width: number) {
+  const W = Math.max(160, Math.round(width))
+  const tall = [0, 0.62, 0.84, 1][Math.max(0, Math.min(3, Math.round(level)))] ?? 0
   let seed = 7
   const next = () => {
     seed = (seed * 1103515245 + 12345) % 2147483648
@@ -46,10 +47,11 @@ export function spectrumSvg(level: number) {
       continue
     }
 
-    const steps = Array.from({ length: 8 }, () => Math.max(4.1, reach * (0.25 + 0.75 * next())))
+    // twelve heights a loop, a new one every twentieth of a second or so: quick, like a real analyser
+    const steps = Array.from({ length: 12 }, () => Math.max(4.1, reach * (0.18 + 0.82 * next() ** 0.8)))
     const heights = [...steps, steps[0]].map(h => h.toFixed(1)).join(';')
     const tops = [...steps, steps[0]].map(h => (85.6 - (h ?? 0)).toFixed(1)).join(';')
-    const dur = (0.9 + next() * 0.9).toFixed(2)
+    const dur = (0.55 + next() * 0.45).toFixed(2)
     bars +=
       `<rect x="${x}%" width="3%" fill="url(#led)"><animate attributeName="height" values="${heights}" dur="${dur}s" repeatCount="indefinite"/>` +
       `<animate attributeName="y" values="${tops}" dur="${dur}s" repeatCount="indefinite"/></rect>`
@@ -61,12 +63,13 @@ export function spectrumSvg(level: number) {
     gaps += `<rect x="0" y="${(85.6 - k * 5.75).toFixed(2)}" width="100%" height="1.65" fill="#060b08"/>`
   }
 
+  // A plain picture (not a frame of its own, which the app reloads on every
+  // redraw of the row): while its markup stays the same it keeps playing.
   return (
-    `<svg xmlns="http://www.w3.org/2000/svg" width="360" height="96" style="display:block;position:fixed;left:0;top:0;width:100%;background:#1f1f1e">` +
+    `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="96" viewBox="0 0 ${W} 96">` +
     `<defs><linearGradient id="led" gradientUnits="userSpaceOnUse" x1="0" y1="86" x2="0" y2="16"><stop offset="0" stop-color="#3ddc5a"/><stop offset="0.56" stop-color="#3ddc5a"/><stop offset="0.6" stop-color="#ffc93c"/><stop offset="0.82" stop-color="#ffc93c"/><stop offset="0.86" stop-color="#ff4d4d"/><stop offset="1" stop-color="#ff4d4d"/></linearGradient></defs>` +
-    `<rect width="100%" height="100%" fill="#1f1f1e"/>` +
-    `<rect x="0.5" y="0.5" height="95" rx="9" fill="#1b1e21" stroke="#3b4146" style="width:calc(100% - 1px)"/>` +
-    `<rect x="6" y="9" height="78" rx="5" fill="#060b08" stroke="#0e2a14" style="width:calc(100% - 12px)"/>` +
-    `<svg x="3%" y="0" width="94%" height="96" overflow="hidden">${bars}${gaps}</svg></svg>`
+    `<rect x="0.5" y="0.5" width="${W - 1}" height="95" rx="9" fill="#1b1e21" stroke="#3b4146"/>` +
+    `<rect x="6" y="9" width="${W - 12}" height="78" rx="5" fill="#060b08" stroke="#0e2a14"/>` +
+    `<svg x="12" y="0" width="${W - 24}" height="96" overflow="hidden">${bars}${gaps}</svg></svg>`
   )
 }

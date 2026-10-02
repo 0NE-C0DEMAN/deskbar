@@ -129,8 +129,8 @@ test('the band draws an icon and hides the counts until hover', async ($: any, o
     await ui.redraw(PROPS)
     const shown = (await ui.findAll({ type: 'Text' })).map((t: any) => t.text).join('|')
     // the weather is its icon and its percentage, nothing between them
-    // six of the row's own, and the timer's stopwatch, which shows in every project
-    expect(surface === 'desktop' ? (await ui.findAll({ type: 'Svg' })).length : 7).toBe(7)
+    // six of the row's own, and the timer's stopwatch and start tile, which show in every project
+    expect(surface === 'desktop' ? (await ui.findAll({ type: 'Svg' })).length : 8).toBe(8)
     expect((await ui.findAll({ type: 'Client' })).map((c: any) => c.key)).not.toContain('context-meter')
     if (surface === 'desktop') expect((await ui.findAll({ type: 'Svg' })).map((s: any) => s.props.alt).join('|')).toContain('calendar in 25m|tasks 1|notes ')
     if (surface === 'terminal') expect(shown).toContain('⛅')

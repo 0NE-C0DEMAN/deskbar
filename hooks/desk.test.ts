@@ -4,18 +4,17 @@ import { expect, mock, test } from 'claude-code/testing'
 const sounds: string[] = []
 
 const PROPS = { hasSurvey: false, isWorking: false, maxRows: 20, bodyColumns: 120 }
+const SURFACES = ['desktop', 'terminal'] as const
+const NOW = Date.UTC(2026, 9, 2, 4, 0, 0)
 
-test('the band draws an icon and hides the counts until hover', async ($: any, on: any) => {
+// A fake engine for the desk: files, connectors, state, clock. What the mod
+// does is recorded in the returned lists, and the switch and settings files
+// read back what the mod last wrote.
+function world(on: any) {
   const state = new Map<string, { value: unknown; version: number }>()
-  const calls: string[] = []
-  let onFile = '{}'
-  // the settings as the mod last saved them, read back like the real file
-  let settingsText = ''
-  const sent: string[] = []
-  let isRead = false
-  const prompts: string[] = []
+  const w = { calls: [] as string[], sent: [] as string[], written: [] as string[], prompts: [] as string[], toasts: [] as string[], onFile: '{}', settingsText: '', isRead: false }
   on('prompt.submit', (_$: any, e: any) => {
-    prompts.push(e.text)
+    w.prompts.push(e.text)
 
     return { text: e.text }
   })
@@ -33,9 +32,8 @@ test('the band draws an icon and hides the counts until hover', async ($: any, o
   on('ui.render', () => ({ type: 'engine', ref: 0 }))
   on('session.messages', () => ({ value: [] }))
   mock.store(on)
-  const toasts: string[] = []
   on('ui.toast', (_$: any, e: any) => {
-    toasts.push(JSON.stringify(e))
+    w.toasts.push(JSON.stringify(e))
 
     return { value: undefined }
   })
@@ -60,8 +58,8 @@ test('the band draws an icon and hides the counts until hover', async ($: any, o
   on('fs.list', (_$: any, e: any) => ({ value: dirs[tail(e.path)] ?? [] }))
   on('fs.read', (_$: any, e: any) => {
     const at = tail(e.path)
-    if (at === '/.claude/deskbar-data/desk-on.json') return { value: onFile }
-    if (at === '/.claude/deskbar-data/settings.json' && settingsText !== '') return { value: settingsText }
+    if (at === '/.claude/deskbar-data/desk-on.json') return { value: w.onFile }
+    if (at === '/.claude/deskbar-data/settings.json' && w.settingsText !== '') return { value: w.settingsText }
     const tasks: Record<string, unknown> = {
       '/.claude/tasks/sess-a/1.json': { id: '1', subject: 'Parser fix', status: 'pending' },
       '/.claude/tasks/sess-b/1.json': { id: '1', subject: 'Train baseline', status: 'completed' },
@@ -70,11 +68,10 @@ test('the band draws an icon and hides the counts until hover', async ($: any, o
 
     return tasks[at] === undefined ? { deny: 'ENOENT' } : { value: JSON.stringify(tasks[at]) }
   })
-  const written: string[] = []
   on('fs.write', (_$: any, e: any) => {
-    written.push(`${tail(e.path)}=${e.text}`)
-    if (tail(e.path) === '/.claude/deskbar-data/desk-on.json') onFile = e.text
-    if (tail(e.path) === '/.claude/deskbar-data/settings.json') settingsText = e.text
+    w.written.push(`${tail(e.path)}=${e.text}`)
+    if (tail(e.path) === '/.claude/deskbar-data/desk-on.json') w.onFile = e.text
+    if (tail(e.path) === '/.claude/deskbar-data/settings.json') w.settingsText = e.text
 
     return { value: undefined }
   })
@@ -82,7 +79,6 @@ test('the band draws an icon and hides the counts until hover', async ($: any, o
   on('process.spawn', async function* () {
     return { code: 0, signal: null }
   })
-  const NOW = Date.UTC(2026, 9, 2, 4, 0, 0)
   on('clock.now', () => ({ value: NOW }))
   on('clock.every', () => ({ value: undefined }))
   on('clock.sleep', () => ({ value: undefined }))
@@ -96,12 +92,12 @@ test('the band draws an icon and hides the counts until hover', async ($: any, o
     ],
   }))
   on('mcp.call', (_$: any, e: any) => {
-    calls.push(`${e.server}/${e.tool}`)
-    sent.push(`${e.tool} ${JSON.stringify(e.args)}`)
-    if (e.tool === 'unlabel_thread') isRead = true
+    w.calls.push(`${e.server}/${e.tool}`)
+    w.sent.push(`${e.tool} ${JSON.stringify(e.args)}`)
+    if (e.tool === 'unlabel_thread') w.isRead = true
     const data =
       e.tool === 'search_threads'
-        ? { resultCountEstimate: '7', threads: [{ id: 't1', viewUrl: 'https://mail.google.com/mail/?authuser=me@gmail.com#all/t1', messages: [{ sender: 'Dana Lee <dana@x.com>', subject: 'Weekly call', labelIds: isRead ? ['INBOX'] : ['UNREAD', 'INBOX'], date: '2026-10-02T03:30:00Z' }] }, { messages: [{ sender: 'store-news@amazon.in', subject: 'Deals' }] }, { messages: [{ sender: 'notifications@github.com', subject: 'Run failed' }] }, { messages: [{ sender: 'nike@official.nike.in', subject: 'Sale' }] }, { messages: [{ sender: 'team@emails.hostinger.com', subject: 'x' }] }, { messages: [{ sender: 'services@custcomm.icici.bank.in', subject: 'x' }] }, { messages: [{ sender: 'lee@acme.example', subject: 'Keep skip' }] }] }
+        ? { resultCountEstimate: '7', threads: [{ id: 't1', viewUrl: 'https://mail.google.com/mail/?authuser=me@gmail.com#all/t1', messages: [{ sender: 'Dana Lee <dana@x.com>', subject: 'Weekly call', labelIds: w.isRead ? ['INBOX'] : ['UNREAD', 'INBOX'], date: '2026-10-02T03:30:00Z' }] }, { messages: [{ sender: 'store-news@amazon.in', subject: 'Deals' }] }, { messages: [{ sender: 'notifications@github.com', subject: 'Run failed' }] }, { messages: [{ sender: 'nike@official.nike.in', subject: 'Sale' }] }, { messages: [{ sender: 'team@emails.hostinger.com', subject: 'x' }] }, { messages: [{ sender: 'services@custcomm.icici.bank.in', subject: 'x' }] }, { messages: [{ sender: 'lee@acme.example', subject: 'Keep skip' }] }] }
         : { events: [{ summary: 'Acme Dev Weekly Meeting', status: 'confirmed', start: { dateTime: new Date(NOW + 25 * 60000).toISOString() }, end: { dateTime: new Date(NOW + 55 * 60000).toISOString() }, conferenceUrl: 'https://meet.google.com/x', attendees: [{}, {}, {}] }] }
 
     return { value: { isError: false, content: [{ type: 'text', text: JSON.stringify(data) }] } }
@@ -114,23 +110,39 @@ test('the band draws an icon and hides the counts until hover', async ($: any, o
 
     return { value: { isSet: true, version } }
   })
+
+  return w
+}
+
+// A session with the desk switched on.
+async function deskOn($: any) {
+  await $.session.start({ cwd: 'C:\proj', surface: 'desktop', isInteractive: true })
+  expect((await $.command.run({ command: 'desk', args: 'on' })).text).toContain('on for this session')
+}
+
+const texts = async (ui: any) => (await ui.findAll({ type: 'Text' })).map((x: any) => x.text).join('|')
+
+test('the desk is off until asked, then the row draws its chips', async ($: any, on: any) => {
+  const w = world(on)
   await $.session.start({ cwd: 'C:\proj', surface: 'desktop', isInteractive: true })
 
   // off until the session asks for it: nothing drawn, nothing fetched
   const quiet = await $.ui.mount({ plugin: 'deskbar', surface: 'desktop', component: 'AbovePrompt', props: PROPS })
   expect(await quiet.findAll({ type: 'Button' })).toHaveLength(0)
-  expect(calls).toHaveLength(0)
+  expect(w.calls).toHaveLength(0)
   await quiet.unmount()
   expect((await $.command.run({ command: 'desk', args: 'on' })).text).toContain('on for this session')
-  expect(onFile).toContain('"sess-b": true')
+  expect(w.onFile).toContain('"sess-b": true')
 
-  for (const surface of ['desktop', 'terminal'] as const) {
+  for (const surface of SURFACES) {
     const ui = await $.ui.mount({ plugin: 'deskbar', surface, component: 'AbovePrompt', props: PROPS })
     await ui.redraw(PROPS)
-    const shown = (await ui.findAll({ type: 'Text' })).map((t: any) => t.text).join('|')
-    // the weather is its icon and its percentage, nothing between them
+    const shown = await texts(ui)
     // six of the row's own, and the timer's stopwatch and start tile, which show in every project
+    await ui.redraw(PROPS)
     expect(surface === 'desktop' ? (await ui.findAll({ type: 'Svg' })).length : 8).toBe(8)
+    expect((await ui.findAll({ type: 'Button' })).map((b: any) => b.key)).toContain('resume')
+    // the weather is its icon and its percentage, nothing between them
     expect((await ui.findAll({ type: 'Client' })).map((c: any) => c.key)).not.toContain('context-meter')
     if (surface === 'desktop') expect((await ui.findAll({ type: 'Svg' })).map((s: any) => s.props.alt).join('|')).toContain('calendar in 25m|tasks 1|notes ')
     if (surface === 'terminal') expect(shown).toContain('⛅')
@@ -138,9 +150,21 @@ test('the band draws an icon and hides the counts until hover', async ($: any, o
     if (surface === 'desktop') expect((await ui.findAll({ type: 'Svg' })).some((s: any) => s.props.alt === 'mail 1' && s.props.source.includes('>1</text>'))).toBe(true)
     else expect((await ui.find({ key: 'mail' }))?.text).toContain('📧 ')
     expect(shown).toContain('Acme Dev Weekly Meeting in 25m')
+    if (surface === 'terminal') expect((await ui.find({ key: 'todo' }))?.text).toContain('✅ 1')
+    await ui.unmount()
+  }
+})
+
+test('mail and calendar dropdowns', async ($: any, on: any) => {
+  const w = world(on)
+  await deskOn($)
+
+  for (const surface of SURFACES) {
+    const ui = await $.ui.mount({ plugin: 'deskbar', surface, component: 'AbovePrompt', props: PROPS })
+    await ui.redraw(PROPS)
     await ui.press({ key: 'mail' })
     await ui.redraw(PROPS)
-    const mail = (await ui.findAll({ type: 'Text' })).map((x: any) => x.text).join('|')
+    const mail = await texts(ui)
     expect(mail).toContain('Primary, latest 7: 1 unread')
     expect(mail).not.toContain('Actions')
     expect(mail).toContain('Dana Lee')
@@ -149,30 +173,38 @@ test('the band draws an icon and hides the counts until hover', async ($: any, o
     expect(links).toContain('Weekly call=https://mail.google.com/mail/?authuser=me%40gmail.com#all/t1')
     await ui.press({ key: 'calendar' })
     await ui.redraw(PROPS)
-    const cal = (await ui.findAll({ type: 'Text' })).map((x: any) => x.text).join('|')
+    const cal = await texts(ui)
     expect(cal).toContain('Upcoming meetings')
     if (surface === 'desktop') {
       await ui.input({ key: 'event', text: 'call with Tom tomorrow 6pm for 45m' })
       // the day depends on the machine's time zone; the clock time and the length do not
-      const made = sent.filter(line => line.startsWith('create_event ')).pop() ?? ''
+      const made = w.sent.filter(line => line.startsWith('create_event ')).pop() ?? ''
       expect(made).toContain('"summary":"Call with Tom"')
       expect(made).toContain('T18:00:00')
       expect(made).toContain('T18:45:00')
       expect(made).toContain('"addGoogleMeetUrl":true')
     }
     expect(cal).toContain('in 25m|Acme Dev Weekly Meeting|3')
-    expect(calls).toContain('abc-1/search_threads')
-    expect(calls).toContain('abc-2/list_events')
+    expect(w.calls).toContain('abc-1/search_threads')
+    expect(w.calls).toContain('abc-2/list_events')
     expect((await ui.find({ type: 'Link' }))?.props.href).toBe('https://meet.google.com/x')
     await ui.press({ key: 'calendar' })
+    await ui.unmount()
+  }
+})
 
-    // tasks: this session's list first, then another session's
-    if (surface === 'terminal') expect((await ui.find({ key: 'todo' }))?.text).toContain('✅ 1')
+test('tasks across sessions: this session first, a pick, a search', async ($: any, on: any) => {
+  world(on)
+  await deskOn($)
+
+  for (const surface of SURFACES) {
+    const ui = await $.ui.mount({ plugin: 'deskbar', surface, component: 'AbovePrompt', props: PROPS })
+    await ui.redraw(PROPS)
     await ui.press({ key: 'todo' })
     await ui.redraw(PROPS)
     await ui.press({ key: 'todo-mine' })
     await ui.redraw(PROPS)
-    let tasks = (await ui.findAll({ type: 'Text' })).map((x: any) => x.text).join('|')
+    let tasks = await texts(ui)
     expect(tasks).toContain('Kaggle')
     expect(tasks).toContain('1 of 2')
     if (surface === 'terminal') {
@@ -185,30 +217,40 @@ test('the band draws an icon and hides the counts until hover', async ($: any, o
     expect(tasks).toContain('Train baseline')
     await ui.press({ key: 'todo-pick-sess-a' })
     await ui.redraw(PROPS)
-    tasks = (await ui.findAll({ type: 'Text' })).map((x: any) => x.text).join('|')
+    tasks = await texts(ui)
     expect(tasks).toContain('Acme')
     expect(tasks).toContain('○ Parser fix')
     await ui.input({ key: 'todo-search', text: 'kag' })
     await ui.redraw(PROPS)
-    tasks = (await ui.findAll({ type: 'Text' })).map((x: any) => x.text).join('|')
+    tasks = await texts(ui)
     expect(tasks).toContain('Kaggle')
     expect(tasks).toContain('1 of 1 found')
     expect(tasks).toContain('● Submit to leaderboard')
     await ui.input({ key: 'todo-search', text: '' })
     await ui.press({ key: 'todo' })
+    await ui.unmount()
+  }
+})
 
+test('notes are saved, ticked and cleared; the music deck takes a command', async ($: any, on: any) => {
+  const w = world(on)
+  await deskOn($)
+
+  for (const surface of SURFACES) {
+    const ui = await $.ui.mount({ plugin: 'deskbar', surface, component: 'AbovePrompt', props: PROPS })
+    await ui.redraw(PROPS)
     // notes: saved from the field, ticked done, cleared
     await ui.press({ key: 'notes' })
     await ui.redraw(PROPS)
     await ui.input({ key: 'note', text: `ping Sam in 30m (${surface})` })
     await ui.redraw(PROPS)
-    let noted = (await ui.findAll({ type: 'Text' })).map((x: any) => x.text).join('|')
+    let noted = await texts(ui)
     expect(noted).toContain(`ping Sam in 30m (${surface})`)
     expect(noted).toContain('due in 30m')
     const made = (await ui.findAll({ type: 'Button' })).find((b: any) => String(b.key).startsWith('note-done-'))
     await ui.press({ key: made.key })
     await ui.redraw(PROPS)
-    noted = (await ui.findAll({ type: 'Text' })).map((x: any) => x.text).join('|')
+    noted = await texts(ui)
     expect(noted).toContain('no open notes')
     await ui.press({ key: 'notes-clear' })
     await ui.press({ key: 'notes' })
@@ -223,20 +265,25 @@ test('the band draws an icon and hides the counts until hover', async ($: any, o
       await ui.advance(300, { in: 'spectrum' })
     }
     await ui.press({ key: 'music-next' })
-    expect(written.some(line => line.startsWith('/.claude/deskbar-data/music/cmd.txt=') && line.endsWith(' next'))).toBe(true)
+    expect(w.written.some(line => line.startsWith('/.claude/deskbar-data/music/cmd.txt=') && line.endsWith(' next'))).toBe(true)
     await ui.press({ key: 'music' })
     await ui.unmount()
   }
+})
+
+test('demo mode, the narrow band, and the notes tool', async ($: any, on: any) => {
+  world(on)
+  await deskOn($)
 
   // demo mode: made-up mail, meetings, tasks and notes
   expect((await $.command.run({ command: 'desk', args: 'demo' })).text).toContain('Demo mode on')
   const demo = await $.ui.mount({ plugin: 'deskbar', surface: 'desktop', component: 'AbovePrompt', props: PROPS })
   await demo.press({ key: 'mail' })
   await demo.redraw(PROPS)
-  expect((await demo.findAll({ type: 'Text' })).map((x: any) => x.text).join('|')).toContain('Maya Chen')
+  expect(await texts(demo)).toContain('Maya Chen')
   await demo.press({ key: 'todo' })
   await demo.redraw(PROPS)
-  expect((await demo.findAll({ type: 'Text' })).map((x: any) => x.text).join('|')).toContain('Polish the onboarding screens')
+  expect(await texts(demo)).toContain('Polish the onboarding screens')
   await demo.press({ key: 'todo' })
   await demo.unmount()
   expect((await $.command.run({ command: 'desk', args: 'demo' })).text).toContain('Demo mode off')
@@ -246,12 +293,12 @@ test('the band draws an icon and hides the counts until hover', async ($: any, o
   const narrow = await $.ui.mount({ plugin: 'deskbar', surface: 'desktop', component: 'AbovePrompt', props: slim })
   await narrow.press({ key: 'calendar' })
   await narrow.redraw(slim)
-  const heads = (await narrow.findAll({ type: 'Text' })).map((x: any) => x.text).join('|')
+  const heads = await texts(narrow)
   expect(heads).toContain('When|Meeting|Link')
   expect(heads).not.toContain('People')
   await narrow.press({ key: 'mail' })
   await narrow.redraw(slim)
-  expect((await narrow.findAll({ type: 'Text' })).map((x: any) => x.text).join('|')).toContain('From|Subject|When')
+  expect(await texts(narrow)).toContain('From|Subject|When')
   await narrow.press({ key: 'mail' })
   await narrow.unmount()
 

@@ -1391,7 +1391,11 @@ let replyStyle = ''
 
 const settingsFile = ($: EngineInterface) => `${claudeDir($)}/deskbar-data/settings.json`
 
+// counts saves: a re-read that started before a save must not undo it
+let saves = 0
+
 async function readSettings($: EngineInterface) {
+  const savesBefore = saves
   let next = DEFAULTS
 
   try {
@@ -1408,6 +1412,11 @@ async function readSettings($: EngineInterface) {
     // no file yet: the defaults
   }
 
+  // a save landed while this read was under way: what it saved is newer
+  if (saves !== savesBefore) {
+    return
+  }
+
   const hasChanged = JSON.stringify(next) !== JSON.stringify(settings)
   settings = next
   replyStyle = next.replyStyle
@@ -1418,6 +1427,7 @@ async function readSettings($: EngineInterface) {
 }
 
 async function saveSettings($: EngineInterface, next: Settings) {
+  saves += 1
   settings = next
   replyStyle = next.replyStyle
   await $.fs.write(settingsFile($), `${JSON.stringify(next, null, 2)}\n`)
@@ -2242,9 +2252,12 @@ export const registerDesk: Register = on => {
     }
 
     if (word === 'demo') {
-      await saveSettings($, { ...settings, demo: !settings.demo })
+      // the answer goes by what was asked, not by `settings`: a re-read of the
+      // file running at the same moment can still hold the old value
+      const isDemo = !settings.demo
+      await saveSettings($, { ...settings, demo: isDemo })
 
-      return { text: settings.demo ? 'Demo mode on: made-up mail, meetings, tasks and notes, for screenshots. /desk demo again turns it off.' : 'Demo mode off: your real data is back.' }
+      return { text: isDemo ? 'Demo mode on: made-up mail, meetings, tasks and notes, for screenshots. /desk demo again turns it off.' : 'Demo mode off: your real data is back.' }
     }
 
     if (word === 'on' || word === 'off' || word === '') {
